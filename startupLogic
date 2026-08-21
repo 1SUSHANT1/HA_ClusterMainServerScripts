@@ -82,7 +82,33 @@ if $servicesProblem; then
 fi
 }
 
+letEverybodyKnow(){
 
+	if sudo arping -A -I wlan0 -c 5 192.168.1.5; then
+	echo "Succesfully let other devices know of the IP address change."
+	else
+	echo "Failed to let other devices know of the IP address change."
+	fi
+
+}
+
+unassignIPandSetStates(){
+	if ssh -i /home/user/.ssh/key_susie susie@192.168.1.4 'sudo /home/susie/recovery_backup/unassignIP'; then
+		if echo "active" > /tmp/myState; then
+			echo "Main server status set to 'active'"
+		else
+			echo "Main server status couldn't be set active"
+		fi
+		
+		if ssh -i /home/user/.ssh/key_susie susie@192.168.1.4 'echo "passive" > /tmp/myState'; then
+			echo "Backup server status set to 'passive'"
+		else
+
+			echo "Failed to set backup server status to passive"
+		fi
+	fi
+}
+unassignIPandSetStates
 if ping -c 1 192.168.1.5 > /dev/null; then
 
 	backup_currentlyServing=true;
@@ -103,6 +129,7 @@ if  ! $backup_currentlyServing; then
 		echo "Adding the router's port forwarding IP address now"
 		if sudo ip addr add 192.168.1.5/24 dev wlan0; then
 			echo "Successfully Added the address"
+			letEverybodyKnow
 		else
 			echo "Address couldn't be added successfully"
 		fi
@@ -118,13 +145,16 @@ elif $backup_currentlyServing; then
 
 	if healthcheck; then
 		echo "Server passed health checks. Requesting backup to unassign the IP address now"
+			unassignIPandSetStates
 		if ssh -i /home/user/.ssh/key_susie susie@192.168.1.4 'sudo /home/susie/recovery_backup/unassignIP'; then
 			echo "Backup server successfully released the IP adress. Adding it now"
 			
 			if sudo ip addr add 192.168.1.5/24 dev wlan0; then
 				echo "Successfully Added the address"
+				letEverybodyKnow
 			elif [ $? -eq 2 ]; then
 				echo "Successfully Added the address"
+				letEverybodyKnow
 			else
 				echo "Address couldn't be added successfully"
 		

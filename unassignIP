@@ -2,9 +2,11 @@
 
 if sudo ip addr del 192.168.1.5/24 dev wlan0; then
 	echo "Successfully unassigned"
+	echo "passive" > /tmp/mystate
 	exit 0
 elif [ $? -eq 2 ]; then
 	echo "Exit code was 2. Means there was nothing to remove. Aleady unassigned"
+	echo "passive" > /tmp/mystate	
 	exit 0	
 else
 	echo "Couldn't unassign"
