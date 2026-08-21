@@ -1,0 +1,9 @@
+#!/bin/bash
+
+if rc-service gunicorn restart && rc-service apache2 restart; then
+	echo "Successfully restarted"
+	exit 0
+else
+	echo "Recovery failed"
+	exit 1
+fi

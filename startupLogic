@@ -1,0 +1,32 @@
+#!/bin/bash
+
+startup_canTakeover=true;
+backup_currentlyServing=false;
+
+if sudo rc-service gunicorn status && curl -fsS --max-time 5 http://127.0.0.1:8000/ > /dev/null; then
+	echo "Gunicorn is healthy"
+else
+	echo "Gunicorn is unhealthy"
+	startup_canTakeover=false;
+fi
+
+if sudo rc-service apache2 status; then
+	echo "Apache is healthy"
+else 
+	echo "Apache is unhealthy"
+	startup_canTakeover=false;
+fi
+
+if ping -c 1 192.168.1.5 > /dev/null; then
+	echo "Backup server is serving the website"
+	backup_currentlyServing=true;
+else
+	echo "Nothing responded on the router's port forwarding IP address. Let's sleep 2 and try again"
+	sleep 2
+	if ping -c 1 192.168.1.5 > /dev/null; then
+		echo "Backup Server responded"		
+		backup_currentlyServing=true;
+	else
+		echo "The router's IP address is free I can take over"
+	fi
+fi
