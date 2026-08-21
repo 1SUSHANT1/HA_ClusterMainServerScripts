@@ -3,46 +3,127 @@
 startup_canTakeover=true;
 backup_currentlyServing=false;
 
+servicesProblem=false;
+batteryProblem=false;
+
+checkGunicorn(){
+
 if sudo rc-service gunicorn status && curl -fsS --max-time 5 http://127.0.0.1:8000/ > /dev/null; then
-	echo "Gunicorn is healthy"
+	echo "Gunicorn healthy"	
+	return 0
 else
-	echo "Gunicorn is unhealthy"
+	echo "Gunicorn unhealthy"
 	startup_canTakeover=false;
+	return 1
 fi
 
+}
+
+checkApache(){
+
 if sudo rc-service apache2 status; then
-	echo "Apache is healthy"
+	echo "Apache healthy"
+	return 0;
 else 
-	echo "Apache is unhealthy"
+	echo "Apache unhealthy"
 	startup_canTakeover=false;
+	return 1;
 fi
+
+}
+
+checkBattery(){
+
+capacity="$(</sys/class/power_supply/qcom_qg/capacity)"
+status="$(</sys/class/power_supply/pm8150b-charger/status)"
+
+if [[ "$capacity" -lt 20 && "$status" == "Discharging" ]]; then
+
+	return 1;
+else
+
+	return 0;
+fi
+
+}
+
+healthcheck() {
+
+if checkGunicorn && checkApache; then
+	echo "Services are up and healthy"
+
+else
+	echo "Services are not healthy"
+	servicesProblem=true;
+	return 1;
+fi
+
+if checkBattery; then
+	echo "Battery in good health"
+else
+	echo "Battery not in good health"
+	return 1;
+fi
+
+return 0;
+
+}
+
+
+
 
 if ping -c 1 192.168.1.5 > /dev/null; then
 
 	backup_currentlyServing=true;
 	
 else
-	echo "Nothing responded on the router's port forwarding IP address. Let's sleep 2 and try again"
 	sleep 2
 	if ping -c 1 192.168.1.5 > /dev/null; then
 		
 		backup_currentlyServing=true;
-		
-	else
-		echo "The router's IP address is free I can take over"
+
 	fi
 fi
 
-if $startup_canTakeover && ! $backup_currentlyServing; then
-	echo "Adding the router's port forwarding IP address now"
-	if sudo ip addr add 192.168.1.5/24 dev wlan0; then
-		echo "Successfully Added the address"
+if  ! $backup_currentlyServing; then
+	echo "Router's port forwarding IP address is free. Let's perform health checks and take over."
+	if healthcheck; then
+		echo "Server passed health checks."
+		echo "Adding the router's port forwarding IP address now"
+		if sudo ip addr add 192.168.1.5/24 dev wlan0; then
+			echo "Successfully Added the address"
+		else
+			echo "Address couldn't be added successfully"
+		fi
 	else
-		echo "Address couldn't be added successfully"
+		echo "Server failed health check. Should try to get healthy"
 	fi
+
+	
 elif $backup_currentlyServing; then
 	echo "Backup Server is currently serving the website. Should prove I am healthy and ask for control back"
 	# if server passes the health checks, ask for the control back
+
+	if healthcheck; then
+		echo "Server passed health checks. Requesting backup to unassign the IP address now"
+		if ssh -i /home/user/.ssh/key_susie susie@192.168.1.4 'sudo /home/susie/recovery_backup/unassignIP'; then
+			echo "Backup server successfully released the IP adress. Adding it now"
+			
+			if sudo ip addr add 192.168.1.5/24 dev wlan0; then
+				echo "Successfully Added the address"
+			elif [ $? -eq 2 ]; then
+				echo "Successfully Added the address"
+			else
+				echo "Address couldn't be added successfully"
+		
+			fi
+		else
+			echo "Backup server couldn't unassign the IP address."
+		fi
+	else
+		echo "Server failed health check. Should try to get healthy"
+	fi
+
 else
 	echo "Server is not healthy enough to operate"
 	# get healthy and try to take over
