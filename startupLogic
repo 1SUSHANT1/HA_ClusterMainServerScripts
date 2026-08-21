@@ -49,6 +49,7 @@ fi
 
 healthcheck() {
 
+
 if checkGunicorn && checkApache; then
 	echo "Services are up and healthy"
 
@@ -61,6 +62,7 @@ fi
 if checkBattery; then
 	echo "Battery in good health"
 else
+	batteryProblem=true;
 	echo "Battery not in good health"
 	return 1;
 fi
@@ -69,7 +71,16 @@ return 0;
 
 }
 
+getHealthy(){
+if $batteryProblem; then
+	echo "Nothing I can do to help"
+fi
 
+if $servicesProblem; then
+	echo "I will restart services so maybe it will work in the next run"
+	/home/user/recovery_backup/recoveryScript
+fi
+}
 
 
 if ping -c 1 192.168.1.5 > /dev/null; then
@@ -97,6 +108,7 @@ if  ! $backup_currentlyServing; then
 		fi
 	else
 		echo "Server failed health check. Should try to get healthy"
+		getHealthy
 	fi
 
 	
@@ -122,6 +134,7 @@ elif $backup_currentlyServing; then
 		fi
 	else
 		echo "Server failed health check. Should try to get healthy"
+		getHealthy
 	fi
 
 else
