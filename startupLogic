@@ -51,19 +51,22 @@ healthcheck() {
 
 
 if checkGunicorn && checkApache; then
-	echo "Services are up and healthy"
+	echo "Services are up and healthy" | tee -a /home/user/recovery_backup/takeoverLog;
+
 
 else
-	echo "Services are not healthy"
+	echo "Services are not healthy" | tee -a /home/user/recovery_backup/takeoverLog;
+	echo "passive" > /tmp/mystate;
 	servicesProblem=true;
 	return 1;
 fi
 
 if checkBattery; then
-	echo "Battery in good health"
+	echo "Battery in good health" | tee -a /home/user/recovery_backup/takeoverLog;
 else
 	batteryProblem=true;
-	echo "Battery not in good health"
+	echo "Battery not in good health" | tee -a /home/user/recovery_backup/takeoverLog;
+	echo "passive" > /tmp/mystate;
 	return 1;
 fi
 
@@ -73,17 +76,19 @@ return 0;
 
 getHealthy(){
 if $batteryProblem; then
-	echo "Nothing I can do to help"
+	echo "Battery Problem. Nothing I can do to help" | tee -a /home/user/recovery_backup/takeoverLog;
 fi
 
 if $servicesProblem; then
-	echo "I will restart services so maybe it will work in the next run"
+	echo "I will restart services so maybe it will work in the next run" | tee -a /home/user/recovery_backup/takeoverLog;
 	/home/user/recovery_backup/recoveryScript
 fi
 }
 
 letEverybodyKnow(){
 
+	echo active > /tmp/mystate
+	
 	if sudo arping -A -I wlan0 -c 5 192.168.1.5; then
 	echo "Succesfully let other devices know of the IP address change."
 	else
@@ -92,23 +97,6 @@ letEverybodyKnow(){
 
 }
 
-unassignIPandSetStates(){
-	if ssh -i /home/user/.ssh/key_susie susie@192.168.1.4 'sudo /home/susie/recovery_backup/unassignIP'; then
-		if echo "active" > /tmp/myState; then
-			echo "Main server status set to 'active'"
-		else
-			echo "Main server status couldn't be set active"
-		fi
-		
-		if ssh -i /home/user/.ssh/key_susie susie@192.168.1.4 'echo "passive" > /tmp/myState'; then
-			echo "Backup server status set to 'passive'"
-		else
-
-			echo "Failed to set backup server status to passive"
-		fi
-	fi
-}
-unassignIPandSetStates
 if ping -c 1 192.168.1.5 > /dev/null; then
 
 	backup_currentlyServing=true;
@@ -123,51 +111,52 @@ else
 fi
 
 if  ! $backup_currentlyServing; then
-	echo "Router's port forwarding IP address is free. Let's perform health checks and take over."
+	echo "Router's port forwarding IP address is free. Let's perform health checks and take over." | tee -a /home/user/recovery_backup/takeoverLog;
 	if healthcheck; then
-		echo "Server passed health checks."
-		echo "Adding the router's port forwarding IP address now"
+		echo "Server passed health checks." | tee -a /home/user/recovery_backup/takeoverLog;
+		echo "Adding the router's port forwarding IP address now" | tee -a /home/user/recovery_backup/takeoverLog;
 		if sudo ip addr add 192.168.1.5/24 dev wlan0; then
-			echo "Successfully Added the address"
+			echo "Successfully Added the address" | tee -a /home/user/recovery_backup/takeoverLog;
 			letEverybodyKnow
 		else
-			echo "Address couldn't be added successfully"
+			echo "Address couldn't be added successfully" | tee -a /home/user/recovery_backup/takeoverLog;
 		fi
 	else
-		echo "Server failed health check. Should try to get healthy"
+
+		echo "Server failed health check. Should try to get healthy" | tee -a /home/user/recovery_backup/takeoverLog;
 		getHealthy
 	fi
 
 	
 elif $backup_currentlyServing; then
-	echo "Backup Server is currently serving the website. Should prove I am healthy and ask for control back"
+	echo "Backup Server is currently serving the website. Should prove I am healthy and ask for control back" | tee -a /home/user/recovery_backup/takeoverLog;
 	# if server passes the health checks, ask for the control back
 
 	if healthcheck; then
-		echo "Server passed health checks. Requesting backup to unassign the IP address now"
-			unassignIPandSetStates
+		echo "Server passed health checks. Requesting backup to unassign the IP address now" | tee -a /home/user/recovery_backup/takeoverLog;
 		if ssh -i /home/user/.ssh/key_susie susie@192.168.1.4 'sudo /home/susie/recovery_backup/unassignIP'; then
-			echo "Backup server successfully released the IP adress. Adding it now"
+
+			echo "Backup server successfully released the IP adress. Adding it now" | tee -a /home/user/recovery_backup/takeoverLog;
 			
 			if sudo ip addr add 192.168.1.5/24 dev wlan0; then
-				echo "Successfully Added the address"
+				echo "Successfully Added the address" | tee -a /home/user/recovery_backup/takeoverLog;
 				letEverybodyKnow
 			elif [ $? -eq 2 ]; then
-				echo "Successfully Added the address"
+				echo "Successfully Added the address" | tee -a /home/user/recovery_backup/takeoverLog;
 				letEverybodyKnow
 			else
-				echo "Address couldn't be added successfully"
+				echo "Address couldn't be added successfully" | tee -a /home/user/recovery_backup/takeoverLog;
 		
 			fi
 		else
-			echo "Backup server couldn't unassign the IP address."
+			echo "Backup server couldn't unassign the IP address." | tee -a /home/user/recovery_backup/takeoverLog;
 		fi
 	else
-		echo "Server failed health check. Should try to get healthy"
+		echo "Server failed health check. Should try to get healthy" | tee -a /home/user/recovery_backup/takeoverLog;
 		getHealthy
 	fi
 
 else
-	echo "Server is not healthy enough to operate"
-	# get healthy and try to take over
+	echo "Server is not healthy enough to operate" | tee -a /home/user/recovery_backup/takeoverLog;
+	getHealthy
 fi

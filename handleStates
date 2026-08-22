@@ -1,0 +1,72 @@
+#!/bin/bash
+
+checkFile="/tmp/mystate"
+remoteHost="susie@192.168.1.4"
+remoteFile="/tmp/mystate"
+sshKey="/home/user/.ssh/key_susie"
+takeOver="/home/user/recovery_backup/startupLogic"
+
+FILE_SIZE=$(stat -c %s "/home/user/recovery_backup/takeoverLog")
+
+if [ $FILE_SIZE -ge 10000000 ]; then
+        mv /home/user/recovery_backup/takeoverLog /home/user/recovery_backup/takeoverLog1
+fi
+
+
+
+
+
+/home/user/recovery_backup/monitorBackup
+
+
+
+if [[ "$(ssh -i "$sshKey" "$remoteHost" cat /home/susie/myWebsite/Executables/clusterAdmin/lockFile 2>/dev/null)" == "1" ]]; then
+	echo "$(date '+%Y-%m-%d %H:%M:%S')" | tee -a /home/user/recovery_backup/takeoverLog;
+
+	echo "Backup server is running its takeover script. I will come back later" | tee -a /home/user/recovery_backup/takeoverLog;
+
+	exit 1
+fi
+
+
+
+if [[ ! -f "$checkFile" ]]; then
+	echo "$(date '+%Y-%m-%d %H:%M:%S')" | tee -a /home/user/recovery_backup/takeoverLog;
+
+	echo "I don't have a myState file. Maybe I just booted." | tee -a /home/user/recovery_backup/takeoverLog;
+	echo "I'll write passive and for now to avoid disrupting production. Takeover will be handled in the next run" | tee -a /home/user/recovery_backup/takeoverLog;
+	echo "passive" > "$checkFile"
+
+elif ssh -i "$sshKey" "$remoteHost" test -f "$remoteFile"; then
+
+	echo "Both files exist." 
+		
+	remoteState=$(ssh -i "$sshKey" "$remoteHost" cat "$remoteFile")
+	localState=$(cat "$checkFile")
+
+	if [[ "$localState" == "active" && "$remoteState" == "passive" ]]; then
+	echo "I am active. Do nothing"
+	else
+	echo "$(date '+%Y-%m-%d %H:%M:%S')" | tee -a /home/user/recovery_backup/takeoverLog;
+
+        echo "I am passive. Whatever the case, since I am not active, I should try to take over." | tee -a /home/user/recovery_backup/takeoverLog;
+	"$takeOver"
+	fi
+
+else
+	echo "$(date '+%Y-%m-%d %H:%M:%S')" | tee -a /home/user/recovery_backup/takeoverLog;
+
+	echo "mystate file does not exist on the backup server. Let's try to create one" 
+	if ssh -i "$sshKey" "$remoteHost" "echo 'passive' > '$remoteFile' "; then
+		echo "Created mystate file on the backup server" | tee -a /home/user/recovery_backup/takeoverLog;
+
+	else
+		echo "Failed to create mystate file on the backup server" | tee -a /home/user/recovery_backup/takeoverLog;
+		
+	fi
+
+	if [[ "$(cat "$checkFile")" != "active" ]]; then
+		echo "Attempting takeover" | tee -a /home/user/recovery_backup/takeoverLog;
+		"$takeOver"
+	fi
+fi

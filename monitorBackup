@@ -1,0 +1,25 @@
+#!/bin/bash
+
+FILE_SIZE=$(stat -c %s "/home/user/recovery_backup/BackupServerHealth")
+
+if [ $FILE_SIZE -ge 10000000 ]; then
+        mv /home/user/recovery_backup/BackupServerHealth /home/user/recovery_backup/BackupServerHealth1
+fi
+
+
+
+
+if ping -c 1 192.168.1.4 > /dev/null; then
+	echo "Backup server is up"
+else
+	sleep 1
+	if ping -c 1 192.168.1.4 >> /dev/null; then
+	echo "Backup server is up"
+	else
+
+	echo "$(date '+%Y-%m-%d %H:%M:%S')"  | tee -a /home/user/recovery_backup/BackupServerHealth;
+	echo "Backup server may have died." | tee -a /home/user/recovery_backup/BackupServerHealth;
+	
+	fi
+fi
+
